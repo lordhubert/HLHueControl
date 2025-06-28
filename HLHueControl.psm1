@@ -1,203 +1,12 @@
-﻿# TO DO: something about saving initial fetching of bridge ID + IP into a class or variable?
+﻿# WORK IN PROGRESS
 
+# TO DO: something about saving initial fetching of bridge ID + IP into a class or variable?
+# TO DO: modify/recompile FindDevice.exe to fetch TXT records for full bridge ID
+
+# https://developers.meethue.com/develop/hue-api-v2/core-concepts/
 # We have some limitations to bear in mind:
 
 # We can’t send commands to the lights too fast. If you stick to around 10 commands per second to the /light resource as maximum you should be fine. For /grouped_light commands you should keep to a maximum of 1 per second. The REST API should not be used to send a continuous stream of fast light updates for an extended period of time, for that use case you should use the dedicated Hue Entertainment Streaming API.
-
-
-function Enable-HueLight {
-<#
-    .SYNOPSIS
-    Turns on the specified Hue connected light.   
-
-    .DESCRIPTION
-    Enable-HueLight sends Put requests to the Hue REST API, turning on the light/s specified by the LighId parameter. Enable-HueLight can turn on individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
-
-    .PARAMETER LightId
-
-    .PARAMETER ApplicationKey
-
-    .PARAMETER ColourXValue
-
-    .PARAMETER ColourYValue
-
-    .PARAMETER Brightness
-
-    .EXAMPLE
-    Enable-HueLight -LightId $LightId -ColourXValue 0.20 -ColourYValue 0.20 -Brightness 80 -ApplicationKey $ApplicationKey
-
-    .EXAMPLE
-    Enable-HueLight -LightId 12356778910 -Group -Brightness 60
-
-    .INPUTS
-    System.String
-
-    .LINK
-    https://developers.meethue.com/develop/application-design-guidance/using-https/
-
-    .LINK
-    https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
-#>
-    [CmdletBinding(PositionalBinding=$false)]
-    param (
-        [Parameter(
-            Position=0,
-            Mandatory=$true,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [string] $LightId,
-        [Parameter(
-            Mandatory=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [string] $ApplicationKey,
-        [Parameter()]
-        [ValidateRange(0.15,0.68)]
-        [float] $ColourXValue = 0.15,
-        [Parameter()]
-        [ValidateRange(0.05,0.69)]
-        [float] $ColourYValue = 0.05,
-        [Parameter()]
-        [ValidateRange(0.1,100.0)]
-        [float] $Brightness = 75.0,
-        [Parameter()]
-        [string] $BridgeId,
-        [Parameter()]
-        [switch] $Group
-    )
-    begin {
-        $Body = [PSCustomObject]@{
-            on = @{on = $($true)}
-            dimming = @{brightness = $Brightness}
-            color = @{xy = @{x = $ColourXValue
-                y = $ColourYValue}}
-        }
-        $BridgeId = "ecb5fafffe94f0ec"
-    }
-    process {
-        try {
-            $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
-            switch ($true) {
-                $Group {  
-                    $groupuri = "https://192.168.1.63/clip/v2/resource/grouped_light/$($LightId)"   
-                    $response = Invoke-RestMethod -Method Get -Uri $groupuri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12                    
-                    switch ($false) {
-                        ($response.data.on.on) { 
-                            $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
-                        }
-                        Default { Write-Warning "$($MyInvocation.MyCommand): Lightgroup $LightId already enabled" } 
-                    } 
-                }
-                Default {
-                    $uri = "https://192.168.1.63/clip/v2/resource/light/$($LightId)"   
-                    $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12      
-                    switch ($false) {
-                        ($response.data.on.on) { 
-                            $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck 
-                        }
-                        Default { Write-Warning "$($MyInvocation.MyCommand): Light $LightId already enabled" }       
-                    } 
-                }
-            }
-        }
-        catch [System.Net.Http.HttpRequestException] {
-            Write-Error $PSItem.Exception.Message -RecommendedAction "Ensure the Hue Bridge root CA is present in the Trusted Root CA Store. Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ConnectionError
-        }
-        catch {
-            $errormessage = $PSItem.Exception.Message
-            Write-Error -Message $errormessage 
-        }
-    }   
-    clean {}
-} 
-
-
-function Disable-HueLight {
-<#
-    .SYNOPSIS
-
-    .DESCRIPTION
-    Disable-HueLight sends Put requests to the Hue REST API, turning off the light/s specified by the LighId parameter. Disable-HueLight can turn off individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
-    
-    .PARAMETER LightId
-
-    .PARAMETER ApplicationKey
-
-    .PARAMETER Group
-
-    .EXAMPLE
-    Disable-HueLight -LightId $LightId -ApplicationKey $ApplicationKey
-
-    Get-HueDevices | Select -First 1 | Disable-HueLight
-
-    .INPUTS
-    System.String
-
-    .LINK
-    https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
-#>
-    [CmdletBinding(PositionalBinding=$false)]
-    param (
-        [Parameter(
-            Position=0,
-            Mandatory=$true,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [string] $LightId,
-        [Parameter(
-            Mandatory=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [string] $ApplicationKey,
-        [Parameter()]
-        [string] $BridgeId,
-        [Parameter()]
-        [switch] $Group
-    )
-    begin {
-        $Body = [PSCustomObject]@{
-            on = @{on = $($false)}
-        }
-        $BridgeId = "ecb5fafffe94f0ec"
-    }
-    process {
-        try {
-            $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
-            switch ($true) {
-                $Group {  
-                    $groupuri = "https://192.168.1.63/clip/v2/resource/grouped_light/$($LightId)"   
-                    $response = Invoke-RestMethod -Method Get -Uri $groupuri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12
-                    switch ($true) {
-                        ($response.data.on.on) { 
-                            $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
-                        }
-                        Default { Write-Warning "$($MyInvocation.MyCommand): Lightgroup $LightId already disabled." -WarningAction Continue} 
-                    } 
-                }
-                Default {
-                    $uri = "https://192.168.1.63/clip/v2/resource/light/$($LightId)"   
-                    $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12
-                    switch ($true) {
-                        ($response.data.on.on) { 
-                            $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
-                        }
-                        Default { Write-Warning "$($MyInvocation.MyCommand): Light $LightId already disabled." -WarningAction Continue }       
-                    } 
-                }
-            }
-        }
-        catch [System.Net.Http.HttpRequestException] {
-            Write-Error $PSItem.Exception.Message -RecommendedAction "Ensure the Hue Bridge root CA is present in the Trusted Root CA Store. Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ConnectionError
-        }
-        catch {
-            $errormessage = $PSItem.Exception.Message
-            Write-Error -Message $errormessage 
-        }
-    }   
-    clean {}
-}
 
 
 function Get-HueBridge {
@@ -217,7 +26,7 @@ function Get-HueBridge {
     .NOTES
     Get-HueBridge performs an initial check for the required Windows Defender Firewall rule and will create an inbound rule allowing FindDevice.exe to receive connections from the local subnet on port UDP/5353 if required. As such, an administator PowerShell session is required if running Get-HueBridge for the first time.
     
-    There is an unfortunate limitation with FindDevice.exe in that it only requests A / AAAA records and consequently does not return the full bridge id (contained within the TXT record) required for authenticating HTTPS REST requests. Looking at the code, this omission stems from the underlying Makaretu.Dns.Multicast package. It is relatively trivial to add this functionality (see link 5), but I have no real experience with C# or software development in general and do not have the requisite skills, at this point, to compile the amended code into a modified application version. 
+    There is an unfortunate limitation with FindDevice.exe in that it only requests A / AAAA records and consequently does not return the full bridge id (contained within the TXT record) required for authenticating HTTPS requests. Looking at the code, this omission stems from the underlying Makaretu.Dns.Multicast package. It is relatively trivial to add this functionality (see link 5), but I have no real experience with C# or software development in general and do not have the requisite skills, at this point, to compile the amended code into a modified application version. 
     
     As such, attempting to pipe Get-HueBridge to other cmdlets in HLHueControl will sadly fail. 
     
@@ -291,8 +100,8 @@ function Get-HueBridge {
         }
     }   
 } 
-
-
+    
+    
 function Get-HueBridgeFromDiscoveryEndpoint {
 <#
     .SYNOPSIS
@@ -417,5 +226,200 @@ function Get-HueDevices {
             Write-Error $PSItem.Exception.Message
         }
     }
+    clean {}
+}
+    
+
+function Enable-HueLight {
+<#
+    .SYNOPSIS
+    Turns on the specified Hue connected light.   
+
+    .DESCRIPTION
+    Enable-HueLight sends a put request to the Hue REST API, turning on the light specified by the LighId parameter. Enable-HueLight can turn on individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
+
+    .PARAMETER LightId
+
+    .PARAMETER ApplicationKey
+
+    .PARAMETER ColourXValue
+
+    .PARAMETER ColourYValue
+
+    .PARAMETER Brightness
+
+    .EXAMPLE
+    Enable-HueLight -LightId $LightId -ColourXValue 0.20 -ColourYValue 0.20 -Brightness 80 -ApplicationKey $ApplicationKey
+
+    .EXAMPLE
+    Enable-HueLight -LightId 12356778910 -Group -Brightness 60
+
+    .INPUTS
+    System.String
+
+    .LINK
+    https://developers.meethue.com/develop/application-design-guidance/using-https/
+
+    .LINK
+    https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
+#>
+    [CmdletBinding(PositionalBinding=$false)]
+    param (
+        [Parameter(
+            Position=0,
+            Mandatory=$true,
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $LightId,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $ApplicationKey,
+        [Parameter()]
+        [ValidateRange(0.15,0.68)]
+        [float] $ColourXValue = 0.15,
+        [Parameter()]
+        [ValidateRange(0.05,0.69)]
+        [float] $ColourYValue = 0.05,
+        [Parameter()]
+        [ValidateRange(0.1,100.0)]
+        [float] $Brightness = 75.0,
+        [Parameter()]
+        [string] $BridgeId,
+        [Parameter()]
+        [switch] $Group
+    )
+    begin {
+        $Body = [PSCustomObject]@{
+            on = @{on = $($true)}
+            dimming = @{brightness = $Brightness}
+            color = @{xy = @{x = $ColourXValue
+                y = $ColourYValue}}
+        }
+        $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
+    }
+    process {
+        try {
+            $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
+            switch ($true) {
+                $Group {  
+                    $groupuri = "https://192.168.1.63/clip/v2/resource/grouped_light/$($LightId)"   
+                    $response = Invoke-RestMethod -Method Get -Uri $groupuri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12                    
+                    switch ($false) {
+                        ($response.data.on.on) { 
+                            $BodyJSON = $Body | ConvertTo-Json -Compress
+                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
+                        }
+                        Default { Write-Warning "$($MyInvocation.MyCommand): Lightgroup $LightId already enabled" } 
+                    } 
+                }
+                Default {
+                    $uri = "https://192.168.1.63/clip/v2/resource/light/$($LightId)"   
+                    $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12      
+                    switch ($false) {
+                        ($response.data.on.on) { 
+                            $BodyJSON = $Body | ConvertTo-Json -Compress
+                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck 
+                        }
+                        Default { Write-Warning "$($MyInvocation.MyCommand): Light $LightId already enabled" }       
+                    } 
+                }
+            }
+        }
+        catch [System.Net.Http.HttpRequestException] {
+            Write-Error $PSItem.Exception.Message -RecommendedAction "Ensure the Hue Bridge root CA is present in the Trusted Root CA Store. Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ConnectionError
+        }
+        catch {
+            $errormessage = $PSItem.Exception.Message
+            Write-Error -Message $errormessage 
+        }
+    }   
+    clean {}
+} 
+
+
+function Disable-HueLight {
+<#
+    .SYNOPSIS
+
+    .DESCRIPTION
+    Disable-HueLight sends a put request to the Hue REST API, turning off the light specified by the LighId parameter. Disable-HueLight can turn off individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
+    
+    .PARAMETER LightId
+
+    .PARAMETER ApplicationKey
+
+    .PARAMETER Group
+
+    .EXAMPLE
+    Disable-HueLight -LightId $LightId -ApplicationKey $ApplicationKey
+
+    Get-HueDevices | Select -First 1 | Disable-HueLight
+
+    .INPUTS
+    System.String
+
+    .LINK
+    https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
+#>
+    [CmdletBinding(PositionalBinding=$false)]
+    param (
+        [Parameter(
+            Position=0,
+            Mandatory=$true,
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $LightId,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $ApplicationKey,
+        [Parameter()]
+        [string] $BridgeId,
+        [Parameter()]
+        [switch] $Group
+    )
+    begin {
+        $Body = [PSCustomObject]@{
+            on = @{on = $($false)}
+        }
+        $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
+    }
+    process {
+        try {
+            $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
+            switch ($true) {
+                $Group {  
+                    $groupuri = "https://192.168.1.63/clip/v2/resource/grouped_light/$($LightId)"   
+                    $response = Invoke-RestMethod -Method Get -Uri $groupuri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12
+                    switch ($true) {
+                        ($response.data.on.on) { 
+                            $BodyJSON = $Body | ConvertTo-Json -Compress
+                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
+                        }
+                        Default { Write-Warning "$($MyInvocation.MyCommand): Lightgroup $LightId already disabled." -WarningAction Continue} 
+                    } 
+                }
+                Default {
+                    $uri = "https://192.168.1.63/clip/v2/resource/light/$($LightId)"   
+                    $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12
+                    switch ($true) {
+                        ($response.data.on.on) { 
+                            $BodyJSON = $Body | ConvertTo-Json -Compress
+                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
+                        }
+                        Default { Write-Warning "$($MyInvocation.MyCommand): Light $LightId already disabled." -WarningAction Continue }       
+                    } 
+                }
+            }
+        }
+        catch [System.Net.Http.HttpRequestException] {
+            Write-Error $PSItem.Exception.Message -RecommendedAction "Ensure the Hue Bridge root CA is present in the Trusted Root CA Store. Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ConnectionError
+        }
+        catch {
+            $errormessage = $PSItem.Exception.Message
+            Write-Error -Message $errormessage 
+        }
+    }   
     clean {}
 }
