@@ -1,7 +1,4 @@
-﻿# https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
-
-
-# With these commands you can control any number of your lights in any way you want, just address the correct light resource and send it the command you want.
+﻿# TO DO: something about saving initial fetching of bridge ID + IP into a class or variable?
 
 # We have some limitations to bear in mind:
 
@@ -11,16 +8,35 @@
 function Enable-HueLight {
 <#
     .SYNOPSIS
-    Fetches the devices currently connected to the Hue Bridge.    
+    Turns on the specified Hue connected light.   
 
     .DESCRIPTION
-    Fetches the devices currently connected to the Hue Bridge and returns select information about them, including the lightId which is required for invoking REST requests against the Hue API.
+    Enable-HueLight sends Put requests to the Hue REST API, turning on the light/s specified by the LighId parameter. Enable-HueLight can turn on individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
+
+    .PARAMETER LightId
+
+    .PARAMETER ApplicationKey
+
+    .PARAMETER ColourXValue
+
+    .PARAMETER ColourYValue
+
+    .PARAMETER Brightness
 
     .EXAMPLE
-    Enable-HueLight -LightId $LightId -ColourXValue 0.20 -ColourYValue 0.20 -Brightness 80
+    Enable-HueLight -LightId $LightId -ColourXValue 0.20 -ColourYValue 0.20 -Brightness 80 -ApplicationKey $ApplicationKey
 
     .EXAMPLE
     Enable-HueLight -LightId 12356778910 -Group -Brightness 60
+
+    .INPUTS
+    System.String
+
+    .LINK
+    https://developers.meethue.com/develop/application-design-guidance/using-https/
+
+    .LINK
+    https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
 #>
     [CmdletBinding(PositionalBinding=$false)]
     param (
@@ -85,9 +101,12 @@ function Enable-HueLight {
                 }
             }
         }
+        catch [System.Net.Http.HttpRequestException] {
+            Write-Error $PSItem.Exception.Message -RecommendedAction "Ensure the Hue Bridge root CA is present in the Trusted Root CA Store. Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ConnectionError
+        }
         catch {
             $errormessage = $PSItem.Exception.Message
-            Write-Error -Message $errormessage -RecommendedAction "Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ObjectNotFound
+            Write-Error -Message $errormessage 
         }
     }   
     clean {}
@@ -99,6 +118,7 @@ function Disable-HueLight {
     .SYNOPSIS
 
     .DESCRIPTION
+    Disable-HueLight sends Put requests to the Hue REST API, turning off the light/s specified by the LighId parameter. Disable-HueLight can turn off individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
     
     .PARAMETER LightId
 
@@ -113,6 +133,9 @@ function Disable-HueLight {
 
     .INPUTS
     System.String
+
+    .LINK
+    https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
 #>
     [CmdletBinding(PositionalBinding=$false)]
     param (
@@ -165,9 +188,12 @@ function Disable-HueLight {
                 }
             }
         }
+        catch [System.Net.Http.HttpRequestException] {
+            Write-Error $PSItem.Exception.Message -RecommendedAction "Ensure the Hue Bridge root CA is present in the Trusted Root CA Store. Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ConnectionError
+        }
         catch {
             $errormessage = $PSItem.Exception.Message
-            Write-Error -Message $errormessage -RecommendedAction "Verify LightId is correct using Get-HueDevices. Ensure -Group parameter is only specified when working with Ids for grouped lights." -Category ObjectNotFound
+            Write-Error -Message $errormessage 
         }
     }   
     clean {}
@@ -185,6 +211,16 @@ function Get-HueBridge {
     .PARAMETER Timeout
     Optional parameter for specifying the discovery timeout in milliseconds. As noted in the FindDevice.exe documentation, a default of 2000ms or greater is recommended for intitiating device discovery over Wi-Fi.
 
+    .EXAMPLE
+    Get-HueBridge -Timeout 3000
+
+    .NOTES
+    Get-HueBridge performs an initial check for the required Windows Defender Firewall rule and will create an inbound rule allowing FindDevice.exe to receive connections from the local subnet on port UDP/5353 if required. As such, an administator PowerShell session is required if running Get-HueBridge for the first time.
+    
+    There is an unfortunate limitation with FindDevice.exe in that it only requests A / AAAA records and consequently does not return the full bridge id (contained within the TXT record) required for authenticating HTTPS REST requests. Looking at the code, this omission stems from the underlying Makaretu.Dns.Multicast package. It is relatively trivial to add this functionality (see link 5), but I have no real experience with C# or software development in general and do not have the requisite skills, at this point, to compile the amended code into a modified application version. 
+    
+    As such, attempting to pipe Get-HueBridge to other cmdlets in HLHueControl will sadly fail. 
+    
     .LINK
     https://github.com/microsoft/FindDevice
 
@@ -202,13 +238,6 @@ function Get-HueBridge {
 
     .LINK
     https://learn.microsoft.com/en-us/dotnet/api/system.io.filenotfoundexception?view=net-9.0
-
-    .NOTES
-    Get-HueBridge performs an initial check for the required Windows Defender Firewall rule and will create an inbound rule allowing FindDevice.exe to receive connections from the local subnet on port UDP/5353 if required. As such, an administator PowerShell session is required if running Get-HueBridge for the first time.
-    
-    There is an unfortunate limitation with FindDevice.exe in that it only requests A / AAAA records and consequently does not return the full bridge id (contained within the TXT record) required for authenticating HTTPS REST requests. Looking at the code, this omission stems from the underlying Makaretu.Dns.Multicast package. It is relatively trivial to add this functionality (see link 5), but I have no real experience with C# or software development in general and do not have the requisite skills, at this point, to compile the amended code into a modified application version. 
-    
-    As such, attempting to pipe Get-HueBridge to other cmdlets in HLHueControl will sadly fail. 
 #>
     [CmdletBinding()]
     param(
@@ -239,12 +268,12 @@ function Get-HueBridge {
                 New-NetFirewallRule -DisplayName "Get-HueBridge mDNS" -Direction Inbound -Program $FindDeviceExe -RemoteAddress LocalSubnet -Action Allow -Protocol UDP -LocalPort 5353 -Profile Public, Private -ErrorAction Stop | Out-Null
                 Write-Verbose "[PROCESS] Firewall rule created"
             }
-            $args = @('--service' , '_hue._tcp.local' 
+            $arguments = @('--service' , '_hue._tcp.local' 
             '--timeout' , $Timeout
             ) 
             Write-Verbose "[PROCESS] Searching for connected bridges on local network"
-            Write-Verbose "Invoking $FindDeviceExe with arguments: $($args -join ' ')"
-            $Bridges = & $FindDeviceExe @args
+            Write-Verbose "Invoking $FindDeviceExe with arguments: $($arguments -join ' ')"
+            $Bridges = & $FindDeviceExe @arguments
             ($Bridges -match 'Discovered').TrimStart('Discovered:') | ForEach-Object { 
                 $Items = -split $_
                 [PSCustomObject]@{
@@ -272,13 +301,13 @@ function Get-HueBridgeFromDiscoveryEndpoint {
     .DESCRIPTION
     Get-HueBridgeFromDiscoveryEndpoint sends a GET request over HTTPS to the Hue Discovery Endpoint to fetch the ID, LAN IP, and port of all Hue bridges on the local network. As noted in the Hue developer documentation, this presupposes that the bridge has connected to the Hue Cloud at least once. 
     
-    .LINK
-    https://developers.meethue.com/develop/application-design-guidance/hue-bridge-discovery/
-
     .NOTES
     The Hue developer documentation also states that if a bridge does not poll the Hue Cloud for a "longer period", the Cloud will consider the bridge disconnected. I have not tested if this causes the bridge to fall off the discovery endpoint.
 
     There is a highly restrictive rate limit for sending requests to the endpoint (one request per 15 minutes) which makes this a suboptimal method of discovery.
+    
+    .LINK
+    https://developers.meethue.com/develop/application-design-guidance/hue-bridge-discovery/
 #>
     [CmdletBinding()]
     param (
@@ -332,6 +361,9 @@ function Get-HueDevices {
     .INPUTS
     System.String
 
+    .NOTES
+    Get-HueDevices checks for the Hue root CA in the Trusted Root CA store and will throw a FileNotFoundException if this check fails. See first related link for guidance (requires Hue developer account).
+    
     .LINK
     https://developers.meethue.com/develop/application-design-guidance/using-https/
     
@@ -340,9 +372,6 @@ function Get-HueDevices {
 
     .LINK
     https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod?view=powershell-7.5
-
-    .NOTES
-    Get-HueDevices checks for the Hue root CA in the Trusted Root CA store and will throw a FileNotFoundException if this check fails. See first related link for guidance (requires Hue developer account).
 #>
     [CmdletBinding()]
     param (
