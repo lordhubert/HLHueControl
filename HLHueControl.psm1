@@ -236,7 +236,7 @@ function Enable-HueLight {
     Turns on the specified Hue connected light.   
 
     .DESCRIPTION
-    Enable-HueLight sends a put request to the Hue REST API, turning on the light specified by the LighId parameter. Enable-HueLight can turn on individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
+    Enable-HueLight sends a put request to the Hue REST API, turning on the light specified by the LightId parameter. Enable-HueLight can turn on individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
 
     .PARAMETER LightId
 
@@ -343,7 +343,7 @@ function Disable-HueLight {
     .SYNOPSIS
 
     .DESCRIPTION
-    Disable-HueLight sends a put request to the Hue REST API, turning off the light specified by the LighId parameter. Disable-HueLight can turn off individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
+    Disable-HueLight sends a put request to the Hue REST API, turning off the light specified by the LightId parameter. Disable-HueLight can turn off individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
     
     .PARAMETER LightId
 
