@@ -124,7 +124,7 @@ function Get-HueBridgeFromDiscoveryEndpoint {
     begin {      
     }
     process {
-        Write-Warning -Message "There is a rate limit of 1 request /15 minutes for the Hue discovery endpoint; as such, repeated running of this cmdlet will likely result in unresolvable HTTP 429 errors. Do you acknowledge this limitation?" -WarningAction Inquire 
+        Write-Warning -Message "There is a rate limit of 1 request /15 minutes for the Hue discovery endpoint; as such, repeated running of this cmdlet will likely result in HTTP 429 errors. Do you acknowledge this limitation?" -WarningAction Inquire 
         try {
             $Response = Invoke-RestMethod -Uri "https://discovery.meethue.com/" -Method Get
             foreach ($bridge in $Response) {
@@ -197,7 +197,7 @@ function Get-HueDevices {
         $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
         Write-Verbose "[ BEGIN ] Checking Trusted Root CA store for Hue certificate"
         switch (Test-Path -Path Cert:\LocalMachine\Root\47745E6B0BC173E13133ACFA785BD9D5E008067C) {
-            $false { throw [System.IO.FileNotFoundException] "Certificate not found" }
+            $false { throw [System.IO.FileNotFoundException] "Hue root CA not found" }
             Default { Write-Verbose "[ BEGIN ] Certificate present" }
         }
     }
@@ -220,7 +220,7 @@ function Get-HueDevices {
             } 
         }
         catch [System.Net.Http.HttpRequestException] {
-            Write-Error $PSItem.Exception.Message -RecommendedAction "Import the Hue Bridge root CA bundle from https://developers.meethue.com/develop/application-design-guidance/using-https/" -Category ConnectionError
+            Write-Error $PSItem.Exception.Message -Category ConnectionError
         }
         catch {
             Write-Error $PSItem.Exception.Message
@@ -308,7 +308,7 @@ function Enable-HueLight {
                     switch ($false) {
                         ($response.data.on.on) { 
                             $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
+                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -HttpVersion 2.0 -SslProtocol Tls12
                         }
                         Default { Write-Warning "$($MyInvocation.MyCommand): Lightgroup $LightId already enabled" } 
                     } 
@@ -319,7 +319,7 @@ function Enable-HueLight {
                     switch ($false) {
                         ($response.data.on.on) { 
                             $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck 
+                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -HttpVersion 2.0 -SslProtocol Tls12 
                         }
                         Default { Write-Warning "$($MyInvocation.MyCommand): Light $LightId already enabled" }       
                     } 
@@ -395,7 +395,7 @@ function Disable-HueLight {
                     switch ($true) {
                         ($response.data.on.on) { 
                             $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
+                            Invoke-RestMethod -Method 'Put' -Uri $groupuri -ContentType "application/json" -Body $BodyJSON -Headers $headers -HttpVersion 2.0 -SslProtocol Tls12
                         }
                         Default { Write-Warning "$($MyInvocation.MyCommand): Lightgroup $LightId already disabled." -WarningAction Continue} 
                     } 
@@ -406,7 +406,7 @@ function Disable-HueLight {
                     switch ($true) {
                         ($response.data.on.on) { 
                             $BodyJSON = $Body | ConvertTo-Json -Compress
-                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -SkipCertificateCheck
+                            Invoke-RestMethod -Method 'Put' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -HttpVersion 2.0 -SslProtocol Tls12
                         }
                         Default { Write-Warning "$($MyInvocation.MyCommand): Light $LightId already disabled." -WarningAction Continue }       
                     } 
