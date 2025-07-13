@@ -109,6 +109,9 @@ function Get-HueBridgeFromDiscoveryEndpoint {
 
     .DESCRIPTION
     Get-HueBridgeFromDiscoveryEndpoint sends a GET request over HTTPS to the Hue Discovery Endpoint to fetch the ID, LAN IP, and port of all Hue bridges on the local network. As noted in the Hue developer documentation, this presupposes that the bridge has connected to the Hue Cloud at least once. 
+
+    .EXAMPLE
+    $BridgeId = (Get-HueBridgeFromDiscoveryEndpont).BridgeId
     
     .NOTES
     The Hue developer documentation also states that if a bridge does not poll the Hue Cloud for a "longer period", the Cloud will consider the bridge disconnected. I have not tested if this causes the bridge to fall off the discovery endpoint.
@@ -196,7 +199,7 @@ function Get-HueDevices {
         $Uri = "https://192.168.1.63/clip/v2/resource/device"
         $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
         Write-Verbose "[ BEGIN ] Checking Trusted Root CA store for Hue certificate"
-        switch (Test-Path -Path Cert:\LocalMachine\Root\47745E6B0BC173E13133ACFA785BD9D5E008067C) {
+        switch (Test-Path -Path Cert:\LocalMachine\Root\47745E6B0BC173E13133ACFA785BD9D5E008067C) { # check for certificate thumbprint
             $false { throw [System.IO.FileNotFoundException] "Hue root CA not found" }
             Default { Write-Verbose "[ BEGIN ] Certificate present" }
         }
