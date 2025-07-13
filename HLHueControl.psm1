@@ -426,3 +426,4 @@ function Disable-HueLight {
     }   
     clean {}
 }
+Export-ModuleMember -Function Get-HueBridge, Get-HueBridgeFromDiscoveryEndpoint, Get-HueDevices, Enable-HueLight, Disable-HueLight -Variable BridgeId, BridgeIP, ApplicationKey, LightId
