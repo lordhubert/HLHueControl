@@ -48,7 +48,7 @@ Copyright = '(c) lordh. All rights reserved.'
 # ClrVersion = ''
 
 # Processor architecture (None, X86, Amd64) required by this module
-ProcessorArchitecture = 'X86'
+# ProcessorArchitecture = @()
 
 # Modules that must be imported into the global environment prior to importing this module
 # RequiredModules = @()
