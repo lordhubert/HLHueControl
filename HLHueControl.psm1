@@ -54,13 +54,30 @@ function Get-HueBridge {
         [int] $Timeout = 2500
     )
     begin {
+        $X64Path = "$PSScriptRoot\FindDevice-win-x64\FindDevice.exe"
+        $X86Path = "$PSScriptRoot\FindDevice-win-x86\FindDevice.exe"
     }
     process {
         Write-Verbose "[PROCESS] Establishing path to FindDevice.exe"
-        $FindDeviceExe = Join-Path -Path $PSScriptRoot -ChildPath 'FindDevice-win-x64\FindDevice.exe'
-        switch (Test-Path $FindDeviceExe) {
-            $false { throw [System.IO.FileNotFoundException] "$FindDeviceExe not found" }
-            Default { Write-Verbose "[PROCESS] $FindDeviceExe" }
+        switch ((Get-CimInstance -ClassName win32_operatingsystem).OSArchitecture -eq "64-bit") {
+            $true { 
+                switch (Test-Path $X64Path) {
+                    $false { throw [System.IO.FileNotFoundException] "$X64Path not found" }
+                    Default { 
+                        $FindDeviceExe = $X64Path
+                        Write-Verbose "[PROCESS] $X64Path" 
+                    }
+                }
+            }
+            $false { 
+                switch (Test-Path X86Path) {
+                    $false { throw [System.IO.FileNotFoundException] "$X86Path not found" }
+                    Default { 
+                        $FindDeviceExe = $X86Path
+                        Write-Verbose "[PROCESS] $X86Path" 
+                    }
+                }
+            }
         }
         try {
             Write-Verbose "[PROCESS] Checking firewall rules"
