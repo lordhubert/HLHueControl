@@ -212,14 +212,17 @@ function Get-HueDevices {
             $ResponseData = $Response.data
             foreach ($datum in $ResponseData) {
                 $lightService = $datum.services | Where-Object { $_.rtype -eq "light" }
-                [PSCustomObject]@{
-                    displayName = $datum.metadata.name
-                    lightId = if ($lightservice) {$lightservice.rid} else {$null}
-                    productName = $datum.product_data.product_name
-                    modelid = $datum.product_data.model_id
-                    softwareVersion = $datum.product_data.software_version
-                    applicationKey = $ApplicationKey
+                $Properties = @{
+                    'DisplayName' = $datum.metadata.name
+                    'LightId' = if ($lightservice) {$lightservice.rid} else {$null}
+                    'ProductName' = $datum.product_data.product_name
+                    'ModelId' = $datum.product_data.model_id
+                    'SoftwareVersion' = $datum.product_data.software_version
+                    'ApplicationKey' = $ApplicationKey
                 }
+                $Object = New-Object -Type psobject -Property $Properties
+                $Object.psobject.typenames.insert(0,'HL.HueDeviceInfo')
+                Write-Output $Object
             } 
         }
         catch [System.Net.Http.HttpRequestException] {
@@ -231,7 +234,7 @@ function Get-HueDevices {
     }
     clean {}
 }
-    
+   
 
 function Enable-HueLight {
 <#
