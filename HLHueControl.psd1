@@ -12,7 +12,7 @@
 RootModule = '.\HLHueControl.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.4.1'
+ModuleVersion = '0.7.2'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ FormatsToProcess = @('./HLHueControl.ps1xml')
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Get-HueBridgeFromDiscoveryEndpoint', 'Get-HueDevices', 'Enable-HueLight', 'Disable-HueLight', 'Get-HueBridge')
+FunctionsToExport = @('Get-HueBridgeFromDiscoveryEndpoint', 'Get-HueDevices', 'Enable-HueLight', 'Disable-HueLight', 'Get-HueBridge', 'Get-HueApplicationKey')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
