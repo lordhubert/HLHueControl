@@ -1,12 +1,71 @@
 ﻿# WORK IN PROGRESS
 
 # TO DO: something about saving initial fetching of bridge ID + IP into a class or variable?
-# TO DO: modify/recompile FindDevice.exe to fetch TXT records for full bridge ID
 
 # https://developers.meethue.com/develop/hue-api-v2/core-concepts/
 # We have some limitations to bear in mind:
 
 # We can’t send commands to the lights too fast. If you stick to around 10 commands per second to the /light resource as maximum you should be fine. For /grouped_light commands you should keep to a maximum of 1 per second. The REST API should not be used to send a continuous stream of fast light updates for an extended period of time, for that use case you should use the dedicated Hue Entertainment Streaming API.
+
+
+function Get-HueApplicationKey {
+<#
+    .SYNOPSIS
+
+    .DESCRIPTION
+
+    .PARAMETER BridgeId
+    The Id of the Hue bridge to which the request will be sent
+
+    .PARAMETER BridgeIP
+    The IP address of the Hue bridge to which the request will be sent
+
+    .EXAMPLE
+    Get-HueBridge | Get-HueApplicationKey
+
+    .EXAMPLE
+    Get-HueBridge | Where {$_.BridgeIP -like "192.168.2*"} | Get-HueApplicationKey
+
+    .LINK
+
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $BridgeId,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $BridgeIP
+    )
+    begin {
+        $Body = [PSCustomObject]@{
+            devicetype = "PwshHLHueControl#$($env:COMPUTERNAME)"
+            generateclientkey = $($true)
+        }
+    }            
+    process {
+        try {
+            Write-Warning "You must press the circular 'link' button on your Hue bridge in order to generate an application key. Once done, select Confirm." -WarningAction Inquire
+            $uri = "https://$BridgeIP/api"   
+            $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
+            $BodyJSON = $Body | ConvertTo-Json -Compress
+            $Response = Invoke-RestMethod -Method 'Post' -Uri $uri -ContentType "application/json" -Body $BodyJSON -Headers $headers -HttpVersion 2.0 -SslProtocol Tls12
+            $ResponseObject = [PSCustomObject]@{
+                ApplicationKey = $Response.success.username
+                ClientKey = $Response.success.clientkey
+            }
+            $ResponseObject
+            $Global:ApplicationKey = $ResponseObject.ApplicationKey
+            Write-Warning "Application key has been stored in the `$ApplicationKey variable. Use this application key for all future requests to the API." -WarningAction Continue
+        }
+        catch {
+            Write-Error $_.Exception
+        }
+    }
+}
 
 
 function Get-HueBridge {
@@ -26,18 +85,17 @@ function Get-HueBridge {
     .NOTES
     Get-HueBridge performs an initial check for the required Windows Defender Firewall rule and will create an inbound rule allowing FindDevice.exe to receive connections from the local subnet on port UDP/5353 if required. As such, an administator PowerShell session is required if running Get-HueBridge for the first time.
     
-    There is an unfortunate limitation with FindDevice.exe in that it only requests A / AAAA records and consequently does not return the full bridge id (contained within the TXT record) required for authenticating HTTPS requests. Looking at the code, this omission stems from the underlying Makaretu.Dns.Multicast package. It is relatively trivial to add this functionality (see link 5), but I have no real experience with C# or software development in general and do not have the requisite skills, at this point, to compile the amended code into a modified application version. 
-    
-    As such, attempting to pipe Get-HueBridge to other cmdlets in HLHueControl will sadly fail. 
-    
     .LINK
-    https://github.com/microsoft/FindDevice
+    https://github.com/lordhubert/HLFindDevice
 
     .LINK
     https://developers.meethue.com/develop/application-design-guidance/hue-bridge-discovery/
     
     .LINK
     https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml?&search=hue
+
+    .LINK
+    https://github.com/jdomnitz/net-mdns
 
     .LINK
     https://github.com/richardschneider/net-mdns/tree/master
@@ -54,8 +112,8 @@ function Get-HueBridge {
         [int] $Timeout = 2500
     )
     begin {
-        $X64Path = "$PSScriptRoot\FindDevice-win-x64\FindDevice.exe"
-        $X86Path = "$PSScriptRoot\FindDevice-win-x86\FindDevice.exe"
+        $X64Path = "$PSScriptRoot\HLFindDevice-win-x64\FindDevice.exe"
+        $X86Path = "$PSScriptRoot\HLFindDevice-win-x86\FindDevice.exe"
     }
     process {
         Write-Verbose "[PROCESS] Establishing path to FindDevice.exe"
@@ -91,21 +149,23 @@ function Get-HueBridge {
             }
             else {
                 Write-Verbose "[PROCESS] Creating firewall rule"
-                New-NetFirewallRule -DisplayName "Get-HueBridge mDNS" -Direction Inbound -Program $FindDeviceExe -RemoteAddress LocalSubnet -Action Allow -Protocol UDP -LocalPort 5353 -Profile Public, Private -ErrorAction Stop | Out-Null
+                New-NetFirewallRule -DisplayName "Get-HueBridge mDNS" -Direction Inbound -Program $FindDeviceExe -RemoteAddress LocalSubnet -Action Allow -Protocol UDP -LocalPort 5353 -Profile Public, Private, Domain -ErrorAction Stop | Out-Null
                 Write-Verbose "[PROCESS] Firewall rule created"
             }
             $arguments = @('--service' , '_hue._tcp.local' 
+            '--display-txtrecord', 'true'
             '--timeout' , $Timeout
             ) 
             Write-Verbose "[PROCESS] Searching for connected bridges on local network"
             Write-Verbose "Invoking $FindDeviceExe with arguments: $($arguments -join ' ')"
             $Bridges = & $FindDeviceExe @arguments
-            ($Bridges -match 'Discovered').TrimStart('Discovered:') | ForEach-Object { 
+            ($Bridges -match 'Discovered') -replace "Discovered:",'' | ForEach-Object { 
                 $Items = -split $_
                 [PSCustomObject]@{
-                    "BridgeHostName"=($Items[0])
-                    "BridgeId"=($Items[0]).TrimEnd(".local") # as explained in the notes, this is not the full bridge id 
-                    "BridgeIP"=$Items[1]
+                    BridgeHostName=($Items[0])
+                    BridgeIP=$Items[1]
+                    BridgeId=(($Items[2]) -replace "bridgeid=",'')
+                    BridgeModelId=(($Items[3]) -replace "modelid=",'')
                 }
             }   
         }
@@ -126,6 +186,9 @@ function Get-HueBridgeFromDiscoveryEndpoint {
 
     .DESCRIPTION
     Get-HueBridgeFromDiscoveryEndpoint sends a GET request over HTTPS to the Hue Discovery Endpoint to fetch the ID, LAN IP, and port of all Hue bridges on the local network. As noted in the Hue developer documentation, this presupposes that the bridge has connected to the Hue Cloud at least once. 
+
+    .EXAMPLE
+    Get-HueBridgeFromDiscoveryEndpoint
 
     .EXAMPLE
     $BridgeId = (Get-HueBridgeFromDiscoveryEndpont).BridgeId
@@ -156,11 +219,10 @@ function Get-HueBridgeFromDiscoveryEndpoint {
             }
         }
         catch {
-            Write-Error -Message $PSItem.Exception.Message -RecommendedAction "You have likely exceeded the rate limit. Wait 15 minutes and try again." -Category ConnectionError
+            Write-Error -Message $PSItem.Exception.Message -RecommendedAction "You have likely exceeded the rate limit. Wait 15 minutes and try again. If not, verify you can reach https://discovery.meethue.com/ via a web browser." -Category ConnectionError
         }
     }
 }
-
 
 function Get-HueDevices {
 <#
@@ -173,20 +235,24 @@ function Get-HueDevices {
     Note: this function does not retrieve information about grouped lights. Use Get-HueGroupedLights for this purpose. 
 
     .PARAMETER ApplicationKey
-    The application key for authenticating REST requests to the Hue API. 
+    The application key for authenticating requests to the Hue API. 
 
     .PARAMETER BridgeId
     The Id of the bridge. This is a requirement for HTTPS authentication.
     
     .EXAMPLE
-    Get-HueDevices -ApplicationKey $ApplicationKey -BridgeId $BridgeId
+    $Bridge = Get-HueBridge
+    
+    $Bridge | Get-HueDevices -ApplicationKey $ApplicationKey
     
     .EXAMPLE
-    Get-HueDevices -ApplicationKey (Get-AzKeyVaultSecret -VaultName TestVault -Name HueApplicationKey -AsPlainText) -BridgeId $BridgeId
+    Get-HueDevices -ApplicationKey abcdefghijklmnopqrst-abcdefg -BridgeId 1234567891011 -BridgeIP 192.168.1.60
+    
+    .EXAMPLE
+    $Bridge = Get-HueBridge
 
-    .EXAMPLE
-    Get-HueBridge | Get-HueDevices -ApplicationKey $ApplicationKey
-    
+    Get-HueDevices -ApplicationKey (Get-AzKeyVaultSecret -VaultName TestVault -Name HueApplicationKey -AsPlainText) -BridgeId $Bridge.BridgeId -BridgeIP $Bridge.BridgeIP
+
     .INPUTS
     System.String
 
@@ -206,22 +272,28 @@ function Get-HueDevices {
     param (
         [Parameter(
             Mandatory=$true,
-            ValueFromPipeline=$true)]
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true)]
         [string] $ApplicationKey,
         [Parameter(
+            Mandatory=$true,
             ValueFromPipelineByPropertyName=$true)]
-        [string] $BridgeId
+        [string] $BridgeId,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $BridgeIP
     )
     begin {
-        $Uri = "https://192.168.1.63/clip/v2/resource/device"
-        $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
-        Write-Verbose "[ BEGIN ] Checking Trusted Root CA store for Hue certificate"
+        Write-Verbose "[ BEGIN ] $($MyInvocation.MyCommand): Checking Trusted Root CA store for Hue certificate"
         switch (Test-Path -Path Cert:\LocalMachine\Root\47745E6B0BC173E13133ACFA785BD9D5E008067C) { # check for certificate thumbprint
             $false { throw [System.IO.FileNotFoundException] "Hue root CA not found" }
-            Default { Write-Verbose "[ BEGIN ] Certificate present" }
+            Default { Write-Verbose "[ BEGIN ] $($MyInvocation.MyCommand): Certificate present" }
         }
     }
     process {
+        $Uri = "https://$BridgeIP/clip/v2/resource/device"
+        Write-Verbose "[PROCESS] $Uri"
         try {
             $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
             Write-Verbose "[PROCESS] Sending GET request over HTTPS"
@@ -236,6 +308,8 @@ function Get-HueDevices {
                     'ModelId' = $datum.product_data.model_id
                     'SoftwareVersion' = $datum.product_data.software_version
                     'ApplicationKey' = $ApplicationKey
+                    'BridgeId' = $BridgeId
+                    'BridgeIP' = $BridgeIP
                 }
                 $Object = New-Object -Type psobject -Property $Properties
                 $Object.psobject.typenames.insert(0,'HL.HueDeviceInfo')
@@ -262,8 +336,16 @@ function Enable-HueLight {
     Enable-HueLight sends a put request to the Hue REST API, turning on the light specified by the LightId parameter. Enable-HueLight can turn on individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
 
     .PARAMETER LightId
+    The Id of the light to be disabled 
 
     .PARAMETER ApplicationKey
+    The application key for authenticating requests to the Hue API. 
+    
+    .PARAMETER BridgeId
+    The Id of the Hue bridge to which the request will be sent
+
+    .PARAMETER BridgeIP
+    The IP address of the Hue bridge to which the request will be sent
 
     .PARAMETER ColourXValue
 
@@ -271,8 +353,19 @@ function Enable-HueLight {
 
     .PARAMETER Brightness
 
+    .PARAMETER Group
+    Switch parameter for enabling grouped lights
+
     .EXAMPLE
     Enable-HueLight -LightId $LightId -ColourXValue 0.20 -ColourYValue 0.20 -Brightness 80 -ApplicationKey $ApplicationKey
+
+    .EXAMPLE
+    $Bridge = Get-HueBridge
+    
+    $Bridge | Get-HueDevices | Select -First 1 | Enable-HueLight -Brightness 80
+    
+    .EXAMPLE
+    Get-HueBridge | Get-HueDevices | Select -First 1 | Enable-HueLight -Brightness 60
 
     .EXAMPLE
     Enable-HueLight -LightId 12356778910 -Group -Brightness 60
@@ -283,6 +376,9 @@ function Enable-HueLight {
     .LINK
     https://developers.meethue.com/develop/application-design-guidance/using-https/
 
+    .LINK
+    https://developers.meethue.com/develop/hue-api-v2/api-reference/
+    
     .LINK
     https://community.jumpcloud.com/t5/community-scripts/building-a-nested-json-body-in-powershell-making-a-put-call-to/m-p/1866 
 #>
@@ -298,6 +394,14 @@ function Enable-HueLight {
             Mandatory=$true,
             ValueFromPipelineByPropertyName=$true)]
         [string] $ApplicationKey,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $BridgeId,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $BridgeIP,
         [Parameter()]
         [ValidateRange(0.15,0.68)]
         [float] $ColourXValue = 0.15,
@@ -308,8 +412,6 @@ function Enable-HueLight {
         [ValidateRange(0.1,100.0)]
         [float] $Brightness = 75.0,
         [Parameter()]
-        [string] $BridgeId,
-        [Parameter()]
         [switch] $Group
     )
     begin {
@@ -319,14 +421,13 @@ function Enable-HueLight {
             color = @{xy = @{x = $ColourXValue
                 y = $ColourYValue}}
         }
-        $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
     }
     process {
         try {
             $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
             switch ($true) {
                 $Group {  
-                    $groupuri = "https://192.168.1.63/clip/v2/resource/grouped_light/$($LightId)"   
+                    $groupuri = "https://$BridgeIP/clip/v2/resource/grouped_light/$($LightId)"   
                     $response = Invoke-RestMethod -Method Get -Uri $groupuri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12                    
                     switch ($false) {
                         ($response.data.on.on) { 
@@ -337,7 +438,7 @@ function Enable-HueLight {
                     } 
                 }
                 Default {
-                    $uri = "https://192.168.1.63/clip/v2/resource/light/$($LightId)"   
+                    $uri = "https://$BridgeIP/clip/v2/resource/light/$($LightId)"   
                     $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12      
                     switch ($false) {
                         ($response.data.on.on) { 
@@ -369,15 +470,27 @@ function Disable-HueLight {
     Disable-HueLight sends a put request to the Hue REST API, turning off the light specified by the LightId parameter. Disable-HueLight can turn off individual lights or grouped lights. Requests are made over HTTPS using TLSv1.2, presupposing the presence of the Hue root CA.
     
     .PARAMETER LightId
+    The Id of the light to be disabled 
 
     .PARAMETER ApplicationKey
+    The application key for authenticating requests to the Hue API. 
+
+    .PARAMETER BridgeId
+    The Id of the Hue bridge to which the request will be sent
+
+    .PARAMETER BridgeIP
+    The IP address of the Hue bridge to which the request will be sent
 
     .PARAMETER Group
+    Switch parameter for disabling grouped lights
 
     .EXAMPLE
     Disable-HueLight -LightId $LightId -ApplicationKey $ApplicationKey
 
-    Get-HueDevices | Select -First 1 | Disable-HueLight
+    .EXAMPLE
+    $Bridge = Get-HueBridge
+    
+    $Bridge | Get-huedevices -ApplicationKey $ApplicationKey | Select -First 1 | Disable-HueLight
 
     .INPUTS
     System.String
@@ -397,8 +510,14 @@ function Disable-HueLight {
             Mandatory=$true,
             ValueFromPipelineByPropertyName=$true)]
         [string] $ApplicationKey,
-        [Parameter()]
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
         [string] $BridgeId,
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [string] $BridgeIP,
         [Parameter()]
         [switch] $Group
     )
@@ -406,14 +525,13 @@ function Disable-HueLight {
         $Body = [PSCustomObject]@{
             on = @{on = $($false)}
         }
-        $BridgeId = "ecb5fafffe94f0ec" # this is included until I find a way to reliably fetch the Hue bridge Id using mDNS. See notes section of Get-HueBridge for detail of this limitation. 
     }
     process {
         try {
             $Headers = @{Host=$BridgeId;"hue-application-key"=$ApplicationKey} 
             switch ($true) {
                 $Group {  
-                    $groupuri = "https://192.168.1.63/clip/v2/resource/grouped_light/$($LightId)"   
+                    $groupuri = "https://$BridgeIP/clip/v2/resource/grouped_light/$($LightId)"   
                     $response = Invoke-RestMethod -Method Get -Uri $groupuri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12
                     switch ($true) {
                         ($response.data.on.on) { 
@@ -424,7 +542,7 @@ function Disable-HueLight {
                     } 
                 }
                 Default {
-                    $uri = "https://192.168.1.63/clip/v2/resource/light/$($LightId)"   
+                    $uri = "https://$BridgeIP/clip/v2/resource/light/$($LightId)"   
                     $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $Headers -HttpVersion 2.0 -SslProtocol Tls12
                     switch ($true) {
                         ($response.data.on.on) { 
@@ -446,4 +564,4 @@ function Disable-HueLight {
     }   
     clean {}
 }
-Export-ModuleMember -Function Get-HueBridge, Get-HueBridgeFromDiscoveryEndpoint, Get-HueDevices, Enable-HueLight, Disable-HueLight -Variable BridgeId, BridgeIP, ApplicationKey, LightId
+Export-ModuleMember -Function Get-HueBridge, Get-HueBridgeFromDiscoveryEndpoint, Get-HueDevices, Enable-HueLight, Disable-HueLight, Get-HueApplicationKey -Variable BridgeId, BridgeIP, ApplicationKey, LightId
